@@ -1,2 +1,2 @@
-# Segmentation-of-The-French-Territory
-The aim of this project is to perform a segmentation of the French territory based on Temperature and Wind time series gathered at n = 259 grid points using several clustering methods.
+# Segmentation of The French Territory
+The aim of this project is to perform a segmentation of the French territory based on Temperature and Wind time series gathered at n = 259 grid points using several clustering methods. The “weatherdata.Rdata” data set provides temperature and wind temporal evolution for n = 259 grid points at an hourly sampling rate for a given year (p = 8760 hours). Temp denotes the time series for the temperature. Wind denotes the time series for the wind. The GPSpos variable contains the GPS positions (longitude and latitude) of the time series grid points.
