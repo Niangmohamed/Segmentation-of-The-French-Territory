@@ -1,0 +1,755 @@
+---
+title: "Segmentation of The French Territory Based on Temperature and Wind Time Series"
+author: 
+   - NIANG Mohamed
+   - KAINA Mohamed Abdellah 
+date: "16 December 2019"
+output:
+  pdf_document: 
+    fig_caption: yes
+    highlight: haddock
+    keep_tex: yes
+    number_sections: yes
+    toc: yes
+  html_document: 
+    df_print: kable
+    highlight: haddock
+    number_sections: yes
+    theme: cerulean
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Context
+
+## Weather Segmentation
+
+The aim of this project is to perform a segmentation of the French territory based on Temperature and Wind time series gathered at n = 259 grid points using several clustering methods.
+
+## Weather Data
+
+The "weatherdata.Rdata" data set provides temperature and wind temporal evolution for n = 259 grid points at an hourly sampling rate for a given year (p = 8760 hours). Temp denotes the time series for the temperature. Wind denotes the time series for the wind. The GPSpos variable contains the GPS positions (longitude and latitude) of the time series grid points.
+
+# Loading Packages and Data
+
+## Load Library
+
+```{r}
+library(knitr) 
+library(ggplot2)
+library(kernlab)
+library(FactoMineR)
+library(kableExtra)
+library(cluster)
+library(mclust)
+library(NbClust)
+library(tidyverse)
+library(factoextra)
+library(fpc)
+library(maps)
+```
+
+
+## Load Data
+
+```{r}
+rm(list=ls())
+load("weatherdata.Rdata")
+ls()
+```
+
+
+# Preliminary
+
+Paris city is located at a latitude of 48.51 and a longitude of 2.20 and corresponds to the point i = 59 in the data base. 
+
+## Display The Temperature and Wind Data for Paris City
+
+```{r}
+CityLat <- 48.51 
+CityLong <- 2.20
+tabpos <- (GPSpos$Lon-CityLong)^2+(GPSpos$Lat-CityLat)^2
+i <- which.min(tabpos)
+par(mfrow=c(1,2))
+plot(Temp[i,],type='l',lwd=2,xlab='time',ylab='Temp',col="blue")
+plot(Wind[i,],type='l',lwd=2,xlab='time',ylab='Wind',col="blue")
+```
+
+## Representation of The Results of The Clustering Instances on a Map
+
+```{r}
+set.seed(1234)
+N <- 259
+alea <- sample(1:N,3)
+ville1 <- c(GPSpos[[1]][alea[1]], GPSpos[[2]][alea[1]])
+ville2 <- c(GPSpos[[1]][alea[2]], GPSpos[[2]][alea[2]])
+ville3 <- c(GPSpos[[1]][alea[3]], GPSpos[[2]][alea[3]])
+```
+
+```{r}
+map("world", "France",col="red", xlim=c(-5,10), ylim=c(35,55))
+title("Clustering Instances on a Map")
+map.scale(2,38, metric=T, relwidth=0.4) 
+map.cities(country='France', capitals=1, pch=20, col='red')
+
+points(ville1[1],ville1[2], pch=18)
+text(ville1[1],ville1[2], label="X")
+
+points(ville2[1],ville2[2], pch=18,col="green")
+text(ville2[1],ville2[2], label="Y",col="green")
+
+points(ville3[1],ville3[2], pch=18,col="blue")
+text(ville3[1],ville3[2], label="Z",col="blue")
+```
+
+# Wind Clustering
+
+This section aims to cluster wind data.
+
+## Raw Data
+
+In this section, we will study and compare the results of the kmeans and the hierarchical clustering to provide a segmentation into 4 groups of the Wind using the raw time series. 
+
+
+```{r}
+winddata <- as.matrix(Wind)
+```
+
+```{r}
+# Data Dimension : High Dimensional Data
+dim(winddata)
+```
+
+### Kmeans Algorithm
+
+```{r}
+set.seed(1234)
+windkmeans <- kmeans(winddata, centers = 4, nstart = 25)
+```
+
+```{r}
+table(windkmeans$cluster)
+```
+
+```{r}
+res <- cbind((as.vector(windkmeans$cluster)),as.vector(seq(1:259)))
+```
+
+```{r}
+map("world", "France", col="red", xlim=  c(-5,10), ylim = c(35,55))
+title("Clustering Instances on a Map Using Kmeans")
+map.scale(2, 38, metric = T, relwidth = 0.3) 
+points(GPSpos[[1]][res[res[,1] == 1,2]], GPSpos[[2]][res[res[,1] == 1,2]], pch=16, col = "green")
+points(GPSpos[[1]][res[res[,1] == 2,2]], GPSpos[[2]][res[res[,1] == 2,2]], pch=16, col = "red")
+points(GPSpos[[1]][res[res[,1] == 3,2]], GPSpos[[2]][res[res[,1] == 3,2]], pch=16, col = "blue")
+points(GPSpos[[1]][res[res[,1] == 4,2]], GPSpos[[2]][res[res[,1] == 4,2]], pch=16, col = "yellow")
+points(2.8, 48.51, pch=16, col = "blue")
+text(3, 49, label = "Paris")
+```
+
+### Hierarchical Clustering
+
+```{r}
+# We apply the agglomeration method 
+# List of methods
+m <- c( "average", "single", "complete", "ward")
+names(m) <- c( "average", "single", "complete", "ward")
+```
+
+```{r}
+# function to compute coefficient 
+ac <- function(y) {
+  agnes(winddata, method = y)$ac
+}
+```
+
+```{r}
+map_dbl(m, ac)
+# We remark that the most powerful method is the Ward method
+```
+
+
+
+```{r}
+dist <- dist(winddata, method = 'euclidean')
+windHclust <- hclust(dist, method = "ward.D") 
+```
+
+```{r}
+# Cut in 4 groups and color by groups
+fviz_dend(windHclust, k = 4, # Cut in four groups
+    cex = 0.5, # label size
+    k_colors = c("#2E9FDF", "#00AFBB", "#E7B800", "#FC4E07"),
+    color_labels_by_k = TRUE, # color labels by groups
+    rect = TRUE # Add rectangle around groups
+)
+```
+
+```{r}
+# Cut tree into 4 groups
+grp <- cutree(windHclust, k = 4)
+```
+
+```{r}
+table(grp)
+```
+
+```{r}
+res <- cbind((as.vector(grp)),as.vector(seq(1:259)))
+```
+
+```{r}
+map("world", "France",col="red", xlim=c(-5,10), ylim=c(35,55))
+title("Clustering Instances on a Map Using Hclust")
+map.scale(2,38,metric=T, relwidth=0.3) 
+points(GPSpos[[1]][res[res[,1] == 1,2]],GPSpos[[2]][res[res[,1] == 1,2]], pch=16,col="green")
+points(GPSpos[[1]][res[res[,1] == 2,2]],GPSpos[[2]][res[res[,1] == 2,2]], pch=16,col="red")
+points(GPSpos[[1]][res[res[,1] == 3,2]],GPSpos[[2]][res[res[,1] == 3,2]], pch=16,col="blue")
+points(GPSpos[[1]][res[res[,1] == 4,2]],GPSpos[[2]][res[res[,1] == 4,2]], pch=16,col="yellow")
+points(2.8, 48.51, pch=16,col="blue")
+text(3, 49, label="Paris")
+```
+
+### Conclusion : Comparison of The Results of The Two Algorithms (Kmeans and Hclust)
+
+To compare the two models, we use the $cluster.stats()$ function of the fpc library. Among the values returned by the function $cluster.stats()$, there are two indices to compare the performance of two clusters, namely the within.cluster.ss and the means.silwidth.
+
+Most often, we focus on using within.cluster.ss and avg.silwidth to validate the clustering method. The within.cluster.ss measurement stands for the within clusters sum of squares, and avg.silwidth represents the average silhouette width.
+
+* within.cluster.ss measurement shows how closely related objects are in clusters; the smaller the value, the more closely related objects are within the cluster.
+* avg.silwidth is a measurement that considers how closely related objects are within the cluster and how clusters are separated from each other. The silhouette value usually ranges from 0 to 1; a value closer to 1 suggests the data is better clustered.
+
+```{r}
+# Stats Kmeans
+stat_kmeans <- cluster.stats(dist, windkmeans$cluster)
+within_kmeans <- stat_kmeans$within.cluster.ss
+avg_kmeans <- stat_kmeans$avg.silwidth
+```
+
+```{r}
+# Stats Hclust
+stat_hclust <- cluster.stats(dist, grp)
+within_hclust <- stat_hclust$within.cluster.ss
+avg_hclust <- stat_hclust$avg.silwidth
+```
+
+```{r}
+statsmodelsKmeans <- c(within_kmeans, avg_kmeans)
+statsmodelsHclust <- c(within_hclust, avg_hclust)
+resultsKmeans <- data.frame("Kmeans" = c("within.cluster.ss","avg.silwidth"), "Stats Kmeans" = statsmodelsKmeans)
+resultsHclust <- data.frame("Hclust" = c("within.cluster.ss","avg.silwidth"), "Stats Hclust" = statsmodelsHclust)
+resultfinal <- cbind(resultsKmeans,resultsHclust)
+```
+
+```{r}
+# Comparison Table
+kable(arrange(resultfinal,desc(statsmodelsKmeans),desc(statsmodelsHclust)), digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = F,
+                font_size = 18,
+                position = "center")
+```
+
+**Comments:**
+Based on the results of the above table, we conclude that the Kmeans is **the best model because it has within.cluster.ss smaller and one avg.silwidth larger than the Hclust**.
+
+## Feature Extraction
+
+In this section, We use a Principal Component Analysis (PCA) to reduce the dimension of the n = 259 time series for the Wind data.
+
+```{r}
+windPca <- PCA(winddata, graph = FALSE)
+```
+
+```{r}
+fviz_eig(windPca, addlabels = TRUE)
+```
+
+**Comments:**
+The number of component is determined at the point, beyond which the remaining eigenvalues are all relatively small and of comparable size. From the plot above, we might want to stop at the sixth principal component. 66.61 % of the information (variances) contained in the data are retained by the first six principal components.
+
+## Clustering With The Wind Data
+
+In this section, we Compute and study a segmentation in 4 groups of the wind in France, based on the PCA representation keeping only 10 principal components using kmeans and hierarchical clustering.
+
+```{r}
+windPca_10 <- PCA(winddata, ncp = 10, graph = FALSE) 
+windPca_coord_10 <- as.matrix(windPca_10$ind$coord)
+```
+
+### Kmeans Algorithm With PCA
+
+```{r}
+set.seed(1234)
+windkmeansPca <- kmeans(windPca_coord_10, centers = 4, nstart = 25)
+```
+
+```{r}
+table(windkmeansPca$cluster)
+```
+
+```{r}
+res <- cbind((as.vector(windkmeansPca$cluster)),as.vector(seq(1:259)))
+```
+
+```{r}
+map("world", "France", col="red", xlim=  c(-5,10), ylim = c(35,55))
+title("Clustering Instances on a Map Using Kmeans With PCA")
+map.scale(2, 38, metric = T, relwidth = 0.3) 
+points(GPSpos[[1]][res[res[,1] == 1,2]], GPSpos[[2]][res[res[,1] == 1,2]], pch=16, col = "green")
+points(GPSpos[[1]][res[res[,1] == 2,2]], GPSpos[[2]][res[res[,1] == 2,2]], pch=16, col = "red")
+points(GPSpos[[1]][res[res[,1] == 3,2]], GPSpos[[2]][res[res[,1] == 3,2]], pch=16, col = "blue")
+points(GPSpos[[1]][res[res[,1] == 4,2]], GPSpos[[2]][res[res[,1] == 4,2]], pch=16, col = "yellow")
+points(2.8, 48.51, pch=16, col = "blue")
+text(3, 49, label = "Paris")
+```
+
+### Hierarchical Clustering With PCA
+
+```{r}
+# function to compute coefficient 
+ac <- function(y) {
+  agnes(windPca_coord_10, method = y)$ac
+}
+```
+
+```{r}
+map_dbl(m, ac)
+# We remark that the most powerful method is the Ward method
+```
+
+
+
+```{r}
+dist <- dist(windPca_coord_10, method = 'euclidean')
+windHclustPca <- hclust(dist, method = "ward.D") 
+```
+
+```{r}
+# Cut in 4 groups and color by groups
+fviz_dend(windHclustPca, k = 4, # Cut in four groups
+    cex = 0.5, # label size
+    k_colors = c("#2E9FDF", "#00AFBB", "#E7B800", "#FC4E07"),
+    color_labels_by_k = TRUE, # color labels by groups
+    rect = TRUE # Add rectangle around groups
+)
+```
+
+```{r}
+# Cut tree into 4 groups
+grp <- cutree(windHclustPca, k = 4)
+```
+
+```{r}
+table(grp)
+```
+
+```{r}
+res <- cbind((as.vector(grp)),as.vector(seq(1:259)))
+```
+
+```{r}
+map("world", "France",col="red", xlim=c(-5,10), ylim=c(35,55))
+title("Clustering Instances on a Map Using Hclust With PCA")
+map.scale(2,38,metric=T, relwidth=0.3) 
+points(GPSpos[[1]][res[res[,1] == 1,2]],GPSpos[[2]][res[res[,1] == 1,2]], pch=16,col="green")
+points(GPSpos[[1]][res[res[,1] == 2,2]],GPSpos[[2]][res[res[,1] == 2,2]], pch=16,col="red")
+points(GPSpos[[1]][res[res[,1] == 3,2]],GPSpos[[2]][res[res[,1] == 3,2]], pch=16,col="blue")
+points(GPSpos[[1]][res[res[,1] == 4,2]],GPSpos[[2]][res[res[,1] == 4,2]], pch=16,col="yellow")
+points(2.8, 48.51, pch=16,col="blue")
+text(3, 49, label="Paris")
+```
+
+### Conclusion : Comparison of The Results of The Two Algorithms With (Kmeans and Hclust)
+
+```{r}
+# Stats Kmeans With PCA
+stat_kmeansPca <- cluster.stats(dist, windkmeansPca$cluster)
+within_kmeansPca <- stat_kmeansPca$within.cluster.ss
+avg_kmeansPca <- stat_kmeansPca$avg.silwidth
+```
+
+```{r}
+# Stats Hclust With PCA
+stat_hclustPca <- cluster.stats(dist, grp)
+within_hclustPca <- stat_hclustPca$within.cluster.ss
+avg_hclustPca <- stat_hclustPca$avg.silwidth
+```
+
+```{r}
+statsmodelsKmeansPca <- c(within_kmeansPca, avg_kmeansPca)
+statsmodelsHclustPca <- c(within_hclustPca, avg_hclustPca)
+resultsKmeansPca <- data.frame("Kmeans With PCA" = c("within.cluster.ss","avg.silwidth"), "Stats Kmeans With PCA" = statsmodelsKmeansPca)
+resultsHclustPca <- data.frame("Hclust With PCA" = c("within.cluster.ss","avg.silwidth"), "Stats Hclust With PCA" = statsmodelsHclustPca)
+resultfinalPca <- cbind(resultsKmeansPca,resultsHclustPca)
+```
+
+```{r}
+# Comparison Table
+kable(arrange(resultfinalPca,desc(statsmodelsKmeansPca),desc(statsmodelsHclustPca)), digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = F,
+                font_size = 10,
+                position = "center")
+```
+
+**Comments:**
+Based on the results of the above table, we conclude that the Kmeans with PCA is **the best model because it has within.cluster.ss smaller and one avg.silwidth larger than the Hclust with PCA**. However, the results obtained with the principal component analysis (PCA) are better than those obtained previously. 
+
+# Temperature Clustering
+
+This section aims to cluster temperature data.
+
+## Raw Data
+
+In this section, we will study and compare the results of the kmeans and the hierarchical clustering to provide a segmentation into 4 groups of the temperature using the raw time series. 
+
+```{r}
+tempdata <- as.matrix(Temp)
+```
+
+```{r}
+# Data Dimension : High Dimensional Data
+dim(tempdata)
+```
+
+### Kmeans Algorithm
+
+```{r}
+set.seed(1234)
+tempkmeans <- kmeans(tempdata, centers = 4, nstart = 25)
+```
+
+```{r}
+table(tempkmeans$cluster)
+```
+
+```{r}
+res <- cbind((as.vector(tempkmeans$cluster)),as.vector(seq(1:259)))
+```
+
+```{r}
+map("world", "France", col="red", xlim=  c(-5,10), ylim = c(35,55))
+title("Clustering Instances on a Map Using Kmeans")
+map.scale(2, 38, metric = T, relwidth = 0.3) 
+points(GPSpos[[1]][res[res[,1] == 1,2]], GPSpos[[2]][res[res[,1] == 1,2]], pch=16, col = "green")
+points(GPSpos[[1]][res[res[,1] == 2,2]], GPSpos[[2]][res[res[,1] == 2,2]], pch=16, col = "red")
+points(GPSpos[[1]][res[res[,1] == 3,2]], GPSpos[[2]][res[res[,1] == 3,2]], pch=16, col = "blue")
+points(GPSpos[[1]][res[res[,1] == 4,2]], GPSpos[[2]][res[res[,1] == 4,2]], pch=16, col = "yellow")
+points(2.8, 48.51, pch=16, col = "blue")
+text(3, 49, label = "Paris")
+```
+
+### Hierarchical Clustering
+
+```{r}
+# function to compute coefficient 
+ac <- function(y) {
+  agnes(tempdata, method = y)$ac
+}
+```
+
+```{r}
+map_dbl(m, ac)
+# We remark that the most powerful method is the Ward method
+```
+
+
+
+```{r}
+dist <- dist(tempdata, method = 'euclidean')
+tempHclust <- hclust(dist, method = "ward.D") 
+```
+
+```{r}
+# Cut in 4 groups and color by groups
+fviz_dend(tempHclust, k = 4, # Cut in four groups
+    cex = 0.5, # label size
+    k_colors = c("#2E9FDF", "#00AFBB", "#E7B800", "#FC4E07"),
+    color_labels_by_k = TRUE, # color labels by groups
+    rect = TRUE # Add rectangle around groups
+)
+```
+
+```{r}
+# Cut tree into 4 groups
+grp <- cutree(tempHclust, k = 4)
+```
+
+```{r}
+table(grp)
+```
+
+```{r}
+res <- cbind((as.vector(grp)),as.vector(seq(1:259)))
+```
+
+```{r}
+map("world", "France",col="red", xlim=c(-5,10), ylim=c(35,55))
+title("Clustering Instances on a Map Using Hclust")
+map.scale(2,38,metric=T, relwidth=0.3) 
+points(GPSpos[[1]][res[res[,1] == 1,2]],GPSpos[[2]][res[res[,1] == 1,2]], pch=16,col="green")
+points(GPSpos[[1]][res[res[,1] == 2,2]],GPSpos[[2]][res[res[,1] == 2,2]], pch=16,col="red")
+points(GPSpos[[1]][res[res[,1] == 3,2]],GPSpos[[2]][res[res[,1] == 3,2]], pch=16,col="blue")
+points(GPSpos[[1]][res[res[,1] == 4,2]],GPSpos[[2]][res[res[,1] == 4,2]], pch=16,col="yellow")
+points(2.8, 48.51, pch=16,col="blue")
+text(3, 49, label="Paris")
+```
+
+### Conclusion : Comparison of The Results of The Two Algorithms (Kmeans and Hclust)
+
+```{r}
+# Stats Kmeans
+stat_kmeans <- cluster.stats(dist, tempkmeans$cluster)
+within_kmeans <- stat_kmeans$within.cluster.ss
+avg_kmeans <- stat_kmeans$avg.silwidth
+```
+
+```{r}
+# Stats Hclust
+stat_hclust <- cluster.stats(dist, grp)
+within_hclust <- stat_hclust$within.cluster.ss
+avg_hclust <- stat_hclust$avg.silwidth
+```
+
+```{r}
+statsmodelsKmeans <- c(within_kmeans, avg_kmeans)
+statsmodelsHclust <- c(within_hclust, avg_hclust)
+resultsKmeans <- data.frame("Kmeans" = c("within.cluster.ss","avg.silwidth"), "Stats Kmeans" = statsmodelsKmeans)
+resultsHclust <- data.frame("Hclust" = c("within.cluster.ss","avg.silwidth"), "Stats Hclust" = statsmodelsHclust)
+resultfinal <- cbind(resultsKmeans,resultsHclust)
+```
+
+```{r}
+# Comparison Table
+kable(arrange(resultfinal,desc(statsmodelsKmeans),desc(statsmodelsHclust)), digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = F,
+                font_size = 18,
+                position = "center")
+```
+
+**Comments:**
+Based on the results of the above table, we conclude that the Kmeans is **the best model because it has within.cluster.ss smaller and one avg.silwidth larger than the Hclust**.
+
+## Feature Extraction
+
+In this section, We use a Principal Component Analysis (PCA) to reduce the dimension of the n = 259 time series for the temperature data.
+
+```{r}
+tempPca <- PCA(tempdata, graph = FALSE)
+```
+
+```{r}
+fviz_eig(tempPca, addlabels = TRUE)
+```
+
+**Comments:**
+The number of component is determined at the point, beyond which the remaining eigenvalues are all relatively small and of comparable size. From the plot above, we might want to stop at the fourth principal component. 84.74 % of the information (variances) contained in the data are retained by the first four principal components.
+
+## Clustering Using Model Based : MClust
+
+In this section, We use a Principal Component Analysis (PCA) to reduce the dimension of the n = 259 time series for the temperature data and we compute and study a segmentation of the temperature time series, based on the PCA representation keeping only 10 principal components using a model based clustering method : Mclust.
+
+In this work, 3 assumptions will be studied:
+
+* spherical model with equal volume (EII)
+* spherical model with unequal volume (VII)
+* diagonal, varying volume and shape (VVI)
+
+```{r}
+tempPca_10 <- PCA(tempdata, ncp = 10, graph = FALSE) 
+tempPca_coord_10 <- as.matrix(tempPca_10$ind$coord)
+```
+
+```{r}
+tempmclust_EII <- Mclust(tempPca_coord_10, modelNames = "EII")
+```
+
+```{r}
+summary(tempmclust_EII) # Model = EII  and Number of Components = 9
+```
+
+```{r}
+# BIC values used for choosing the number of clusters
+fviz_mclust(tempmclust_EII, "BIC", palette = "jco")
+```
+
+**Comments:**
+A higher value of the BIC is observed in the 9th component. Therefore, we take $K = 9$ as the number of classes.
+
+```{r}
+tempmclust_VII <- Mclust(tempPca_coord_10, modelNames = "VII")
+```
+
+```{r}
+summary(tempmclust_VII) # Model = VII  and Number of Components = 8
+```
+
+```{r}
+# BIC values used for choosing the number of clusters
+fviz_mclust(tempmclust_VII, "BIC", palette = "jco")
+```
+
+**Comments:**
+A higher value of the BIC is observed in the 8th component. Therefore, we take $K = 8$ as the number of classes.
+
+```{r}
+tempmclust_VVI <- Mclust(tempPca_coord_10, modelNames = "VVI")
+```
+
+```{r}
+summary(tempmclust_VVI) # Model = VVI  and Number of Components = 9
+```
+
+```{r}
+# BIC values used for choosing the number of clusters
+fviz_mclust(tempmclust_VVI, "BIC", palette = "jco")
+```
+
+**Comments:**
+A higher value of the BIC is observed in the 9th component. Therefore, we take $K = 9$ as the number of classes.
+
+```{r}
+tempmclust <- Mclust(tempPca_coord_10, modelNames = c("EII","VII","VVI"))
+```
+
+```{r}
+summary(tempmclust) # Model = VVI  and Number of Components = 9
+```
+
+```{r}
+# BIC values used for choosing the number of clusters
+fviz_mclust(tempmclust, "BIC", palette = "jco")
+```
+
+**Comments:**
+The model given by 'Mclust' object is $(VVI ,9)$. Thus the analysis of the results shows that the best model is the VVI because it has the largest BIC. And a higher value of the BIC is observed in the 9th component. Therefore, we take $K = 9$ as the number of classes.
+
+```{r}
+tempmclust_VVI <- Mclust(tempPca_coord_10, modelNames = "VVI", G=9)
+```
+
+```{r}
+grp <-  tempmclust_VVI$classification
+```
+
+```{r}
+table(tempmclust_VVI$classification)
+```
+
+```{r}
+res <- cbind((as.vector(grp)),as.vector(seq(1:259)))
+```
+
+```{r}
+map("world", "France", col = "red", xlim = c(-5,10), ylim = c(35,55))
+title("Clustering Instances on a Map Using Mclust")
+map.scale(2, 38, metric = T, relwidth = 0.3) 
+points(GPSpos[[1]][res[res[,1] == 1,2]],GPSpos[[2]][res[res[,1] == 1,2]], pch=16,col="green")
+points(GPSpos[[1]][res[res[,1] == 2,2]],GPSpos[[2]][res[res[,1] == 2,2]], pch=16,col="red")
+points(GPSpos[[1]][res[res[,1] == 3,2]],GPSpos[[2]][res[res[,1] == 3,2]], pch=16,col="black")
+points(GPSpos[[1]][res[res[,1] == 4,2]],GPSpos[[2]][res[res[,1] == 4,2]], pch=16,col="yellow")
+points(GPSpos[[1]][res[res[,1] == 5,2]],GPSpos[[2]][res[res[,1] == 5,2]], pch=16,col="brown")
+points(GPSpos[[1]][res[res[,1] == 6,2]],GPSpos[[2]][res[res[,1] == 6,2]], pch=16,col="Orange")
+points(GPSpos[[1]][res[res[,1] == 7,2]],GPSpos[[2]][res[res[,1] == 7,2]], pch=16,col="Purple")
+points(GPSpos[[1]][res[res[,1] == 8,2]],GPSpos[[2]][res[res[,1] == 8,2]], pch=16,col="blue")
+points(GPSpos[[1]][res[res[,1] == 9,2]],GPSpos[[2]][res[res[,1] == 9,2]], pch=16,col="gray")
+points(2.8, 48.51, pch = 16, col = "blue")
+text(3, 49, label = "Paris")
+```
+
+## Clustering Using Spectral Clustering
+
+In this section, we use the 'specc()' function of the 'kernlab' library for clustering the temperature observations using the 10 principal components of the PCA.
+
+```{r}
+# Let's determine the number of clusters
+res.nbclust <- tempPca_coord_10 %>%
+  NbClust(distance = "euclidean",
+          min.nc = 2, max.nc = 10, 
+          method = "complete", index ="all") 
+```
+
+```{r}
+fviz_nbclust(res.nbclust, ggtheme = theme_minimal())
+```
+
+```{r}
+tempSpecc <- specc(tempPca_coord_10, centers = 3)
+```
+
+```{r}
+res <- cbind((as.vector(tempSpecc)),as.vector(seq(1:259)))
+```
+
+```{r}
+map("world", "France", col="red", xlim=c(-5,10), ylim=c(35,55))
+title("Clustering Instances on a Map Using Spectral Clustering")
+map.scale(2,38,metric=T, relwidth=0.3) 
+points(GPSpos[[1]][res[res[,1] == 1,2]],GPSpos[[2]][res[res[,1] == 1,2]], pch=16,col="green")
+points(GPSpos[[1]][res[res[,1] == 2,2]],GPSpos[[2]][res[res[,1] == 2,2]], pch=16,col="red")
+points(GPSpos[[1]][res[res[,1] == 3,2]],GPSpos[[2]][res[res[,1] == 3,2]], pch=16,col="blue")
+points(2.8, 48.51, pch=16,col="blue")
+text(3, 49, label="Paris")
+```
+
+# Temperature and Wind Clustering
+
+This section presents an approach to cluster wind and temperature data at the same time. To do this, since we have temperature and wind data, it is possible to calculate the wind chill index or felt temperature.
+Wind chill, sometimes also referred to as the temperature felt in popular parlance, refers to the feeling of cold produced by the wind on an organism that releases heat, while the actual temperature of the ambient air does not drop. The latter is a number without a unit.
+
+```{r}
+tempwinddata <- 13.12 + 0.6215*Temp + (0.3965*Temp - 11.37)*(Wind^0.16)
+```
+
+```{r}
+# Data Dimension : High Dimensional Data
+dim(tempwinddata)
+```
+
+```{r}
+tempwindPca_10 <- PCA(tempwinddata, ncp = 10, graph = FALSE) 
+tempwindPca_coord_10 <- as.matrix(tempwindPca_10$ind$coord)
+```
+
+```{r}
+# Let's determine the number of clusters
+res.nbclust <- tempwindPca_coord_10 %>%
+  NbClust(distance = "euclidean",
+          min.nc = 2, max.nc = 10, 
+          method = "complete", index ="all") 
+```
+
+```{r}
+fviz_nbclust(res.nbclust, ggtheme = theme_minimal())
+```
+
+```{r}
+set.seed(1234)
+tempwindkmeans <- kmeans(tempwindPca_coord_10, centers = 5, nstart = 25)
+```
+
+```{r}
+table(tempwindkmeans$cluster)
+```
+
+```{r}
+res <- cbind((as.vector(tempwindkmeans$cluster)),as.vector(seq(1:259)))
+```
+
+```{r}
+map("world", "France", col="red", xlim=  c(-5,10), ylim = c(35,55))
+title("Clustering Instances on a Map Using Kmeans")
+map.scale(2, 38, metric = T, relwidth = 0.3) 
+points(GPSpos[[1]][res[res[,1] == 1,2]], GPSpos[[2]][res[res[,1] == 1,2]], pch=16, col = "green")
+points(GPSpos[[1]][res[res[,1] == 2,2]], GPSpos[[2]][res[res[,1] == 2,2]], pch=16, col = "red")
+points(GPSpos[[1]][res[res[,1] == 3,2]], GPSpos[[2]][res[res[,1] == 3,2]], pch=16, col = "blue")
+points(GPSpos[[1]][res[res[,1] == 4,2]], GPSpos[[2]][res[res[,1] == 4,2]], pch=16, col = "yellow")
+points(GPSpos[[1]][res[res[,1] == 5,2]], GPSpos[[2]][res[res[,1] == 5,2]], pch=16, col = "brown")
+points(2.8, 48.51, pch=16, col = "blue")
+text(3, 49, label = "Paris")
+```
